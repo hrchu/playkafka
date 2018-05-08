@@ -1,11 +1,11 @@
 #!/usr/bin/env python
-from confluent_kafka import Consumer, KafkaException, KafkaError
-import sys
 import json
 import logging
 from pprint import pformat
 
-from playkafka import producer
+from confluent_kafka import Consumer, KafkaException, KafkaError
+
+import producer
 
 
 def stats_cb(stats_json_str):
@@ -27,7 +27,7 @@ conf['stats_cb'] = stats_cb
 conf['statistics.interval.ms'] = 100000
 
 # Create logger for consumer (logs will be emitted when poll() is called)
-logger = logging.getLogger('consumer')
+logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 handler = logging.StreamHandler()
 handler.setFormatter(logging.Formatter('%(asctime)-15s %(levelname)-8s %(message)s'))
@@ -37,6 +37,7 @@ logger.addHandler(handler)
 # Hint: try debug='fetch' to generate some log messages
 c = Consumer(conf, logger=logger)
 
+
 def print_assignment(consumer, partitions):
     print('Assignment:', partitions)
 
@@ -45,35 +46,43 @@ c.subscribe(topics, on_assign=print_assignment)
 try:
     while True:
         msg = c.poll(timeout=1.0)
+
         if msg is None:
             continue
-        if msg.error():
+        if msg.error() is not None:
             # Error or event
             if msg.error().code() == KafkaError._PARTITION_EOF:
                 # End of partition event
-                sys.stderr.write('%% %s [%d] reached end at offset %d\n' %
+                logger.info('%% %s [%d] reached end at offset %d\n' %
                                  (msg.topic(), msg.partition(), msg.offset()))
-            elif msg.error():
-                # unknown kafka error, teardown the procedure
-                raise KafkaException(msg.error())
-        else:
-            # Proper message
-            sys.stderr.write('%% %s [%d] at offset %d with key %s:\n' %
-                             (msg.topic(), msg.partition(), msg.offset(),
-                              str(msg.key())))
+                continue
+            # unknown kafka error, break the procedure
+            raise KafkaException(msg.error())
 
-            # blah
+        # Proper message
+        logger.info('%% %s [%d] at offset %d with key %s:\n' %
+                         (msg.topic(), msg.partition(), msg.offset(),
+                          str(msg.key())))
+
+        try:
+            print('Get value {}'.format(msg.value()))
             out = msg.value()[::-1]
+            print('header:', msg.headers())
 
-            # produce it to the next stage
-            producer.produce(out)
+            producer.put_next(out)
 
-            print('value', msg.value())
-            c.commit(message= msg, asynchronous=False)
-            print('position:', c.position(c.assignment()), 'commit:', c.committed(c.assignment()))
+        except BaseException as e:
+            # If a exception is occurred here, i.e., the procedure cannot put the current message back, the process
+            # is teardown by raising the exception. The is because the procedure is claiming C instead of A in the CAP
+            # theory.
+            logger.exception('Unexpected exception occurred in msg processing. Put it back and handles next one.')
+            producer.put_back(msg, e)
+
+        c.commit(message=msg, asynchronous=False)
+        print('Commit done: position:', c.position(c.assignment()), 'commit:', c.committed(c.assignment()))
 
 except KeyboardInterrupt:
-    sys.stderr.write('%% Aborted by user\n')
+    logger.info('%% Aborted by user\n')
 
 finally:
     c.close()

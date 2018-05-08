@@ -19,44 +19,80 @@
 # Example Kafka Producer.
 # Reads lines from stdin and sends to Kafka.
 #
-
+import logging
 from confluent_kafka import Producer
 import sys
 
 
 broker = 'localhost:9092'
 topic = 'qooout'
-
+back_topic = topic
 # Producer configuration
 # See https://github.com/edenhill/librdkafka/blob/master/CONFIGURATION.md
 conf = {'bootstrap.servers': broker}
 
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)
+handler = logging.StreamHandler()
+handler.setFormatter(logging.Formatter('%(asctime)-15s %(levelname)-8s %(message)s'))
+logger.addHandler(handler)
+
+
 # Create Producer instance
-p = Producer(**conf)
+p = Producer(**conf, logger=logger)
+
 
 # Optional per-message delivery callback (triggered by poll() or flush())
 # when a message has been successfully delivered or permanently
 # failed delivery (after retries).
 def delivery_callback(err, msg):
     if err:
-        sys.stderr.write('%% Message failed delivery: %s\n' % err)
+        logger.info('%% Message failed delivery: %s\n' % err)
     else:
-        sys.stderr.write('%% Message delivered to %s [%d] @ %o\n' %
+        logger.info('%% Message delivered to %s [%d] @ %o\n' %
                          (msg.topic(), msg.partition(), msg.offset()))
 
 
-def produce(line):
-    try:
-        # Produce line (without newline)
-        p.produce(topic, line.rstrip(), 'qq', callback=delivery_callback)
+def put_next(value):
+    sync_produce(topic, value, None)
 
-    except BufferError as e:
-        sys.stderr.write('%% Local producer queue is full (%d messages awaiting delivery): try again\n' %
-                         len(p))
+
+def msg_retry_time(msg):
+    if msg.headers() is not None:
+        for h in msg.headers():
+            if h[0] == 'retry':
+                return int(h[1])
+    return 0
+
+
+def put_back(msg, exc):
+    retry_time = msg_retry_time(msg)
+
+    headers = [('retry', str(retry_time + 1))]
+
+    if exc is not None:
+        headers.append(('exc', str(exc)))
+
+    if retry_time >= 2:
+        logger.info('Three vibrations. Hope human being handle it')
+        t = back_topic + '_abort'
+    else:
+        t = back_topic
+
+    v = msg.value()
+
+    sync_produce(t, v, headers)
+
+
+def sync_produce(topic, value, headers):
+    if headers is None:
+        headers = []
+        
+    p.produce(topic, value, 'qq', callback=delivery_callback, headers=headers)
+
     p.flush(3)
 
     if len(p) != 0:
-        raise Exception('timeout')
-
+        raise Exception('produce timeout')
 
 

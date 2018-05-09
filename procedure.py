@@ -132,9 +132,10 @@ class Procedure:
                              str(msg.key())))
 
                 try:
-                    print('Get value {}'.format(msg.value()))
-                    out = msg.value()[::-1]
-                    print('header:', msg.headers())
+                    print('Get header: {} value: {}'.format(msg.headers(), msg.value()))
+
+                    out = self._func(msg)
+
                     # raise Exception('check point')
                     put_next(out)
 
@@ -144,6 +145,7 @@ class Procedure:
                     # instead of A in the CAP theory.
                     logger.exception(
                         'Unexpected exception occurred in msg processing. Put it back and handles next one.')
+
                     # raise Exception('check point')
                     put_back(msg, e)
 
@@ -158,5 +160,9 @@ class Procedure:
 
 
 if __name__ == "__main__":
-    myc = Procedure('qooin2', 'qooout', None)
+    def uppercase(msg):
+        return str(msg.value()).upper()
+
+
+    myc = Procedure('qooout', 'qooout2', uppercase)
     myc.run()

@@ -23,7 +23,6 @@ import logging
 from confluent_kafka import Producer
 import sys
 
-
 broker = 'localhost:9092'
 topic = 'qooout'
 back_topic = topic
@@ -37,7 +36,6 @@ handler = logging.StreamHandler()
 handler.setFormatter(logging.Formatter('%(asctime)-15s %(levelname)-8s %(message)s'))
 logger.addHandler(handler)
 
-
 # Create Producer instance
 p = Producer(**conf, logger=logger)
 
@@ -50,11 +48,11 @@ def delivery_callback(err, msg):
         logger.info('%% Message failed delivery: %s\n' % err)
     else:
         logger.info('%% Message delivered to %s [%d] @ %o\n' %
-                         (msg.topic(), msg.partition(), msg.offset()))
+                    (msg.topic(), msg.partition(), msg.offset()))
 
 
 def put_next(value):
-    sync_produce(topic, value, None)
+    blocking_produce(topic, value)
 
 
 def msg_retry_time(msg):
@@ -65,7 +63,7 @@ def msg_retry_time(msg):
     return 0
 
 
-def put_back(msg, exc):
+def put_back(msg, exc=None):
     retry_time = msg_retry_time(msg)
 
     headers = [('retry', str(retry_time + 1))]
@@ -81,18 +79,13 @@ def put_back(msg, exc):
 
     v = msg.value()
 
-    sync_produce(t, v, headers)
+    blocking_produce(t, v, headers)
 
 
-def sync_produce(topic, value, headers):
-    if headers is None:
-        headers = []
-        
+def blocking_produce(topic, value, headers=[]):
     p.produce(topic, value, 'qq', callback=delivery_callback, headers=headers)
 
     p.flush(3)
 
     if len(p) != 0:
         raise Exception('produce timeout')
-
-

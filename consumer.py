@@ -73,7 +73,7 @@ try:
 
         except BaseException as e:
             # If a exception is occurred here, i.e., the procedure cannot put the current message back, the process
-            # is teardown by raising the exception. The is because the procedure is claiming C instead of A in the CAP
+            # is halt by raising the exception. The is because the procedure is claiming C instead of A in the CAP
             # theory.
             logger.exception('Unexpected exception occurred in msg processing. Put it back and handles next one.')
             producer.put_back(msg, e)

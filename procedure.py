@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 import json
 import logging
+import multiprocessing
 from pprint import pformat
 
 from confluent_kafka import Consumer, KafkaException, KafkaError
@@ -9,7 +10,8 @@ from confluent_kafka.cimpl import Producer
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 handler = logging.StreamHandler()
-handler.setFormatter(logging.Formatter('%(asctime)-15s %(levelname)-8s %(message)s'))
+# handler.setFormatter(logging.Formatter('%(asctime)-15s %(levelname)-8s %(message)s'))
+handler.setFormatter(logging.Formatter('[%(asctime)s] p%(process)s {%(pathname)s:%(lineno)d} %(levelname)s - %(message)s','%m-%d %H:%M:%S'))
 logger.addHandler(handler)
 
 
@@ -52,6 +54,7 @@ class Procedure:
         init_kafka()
 
     def run(self):
+        print('qq')
         # Optional per-message delivery callback (triggered by poll() or flush())
         # when a message has been successfully delivered or permanently
         # failed delivery (after retries).
@@ -163,6 +166,10 @@ if __name__ == "__main__":
     def uppercase(msg):
         return str(msg.value()).upper()
 
-
-    myc = Procedure('qooout', 'qooout2', uppercase)
+    conf = {'bootstrap.servers': 'localhost:19092, localhost:29092, localhost:39092'}
+    myc = Procedure('foo', 'bar', uppercase, conf)
     myc.run()
+
+    # p = multiprocessing.Process(target=myc.run)
+    # p.start()
+    # p.join()

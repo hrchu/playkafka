@@ -2,6 +2,7 @@
 import json
 import logging
 import multiprocessing
+import os
 from pprint import pformat
 
 from confluent_kafka import Consumer, KafkaException, KafkaError
@@ -21,7 +22,9 @@ class Procedure:
         self._out_topic = out_topic
         self._abort_topic = in_topic + '_abort'
         self._func = func
+        self._kafka_conf = kafka_conf
 
+    def run(self, p_conn):
         def init_kafka():
             def stats_cb(stats_json_str):
                 stats_json = json.loads(stats_json_str)
@@ -42,8 +45,8 @@ class Procedure:
                     'statistics.interval.ms': 100000
                     }
 
-            if kafka_conf:
-                conf.update(kafka_conf)
+            if self._kafka_conf:
+                conf.update(self._kafka_conf)
 
             # Hint: try debug='fetch' to generate some log messages
             self.consumer = Consumer(conf, logger=logger)
@@ -53,8 +56,6 @@ class Procedure:
 
         init_kafka()
 
-    def run(self):
-        print('qq')
         # Optional per-message delivery callback (triggered by poll() or flush())
         # when a message has been successfully delivered or permanently
         # failed delivery (after retries).
@@ -115,6 +116,10 @@ class Procedure:
 
         try:
             while True:
+                if p_conn is not None and p_conn.poll() and p_conn.recv() == 'kill':
+                    logger.info('be killed ' + os.name)
+                    break
+
                 msg = c.poll(timeout=1.0)
 
                 if msg is None:
@@ -168,8 +173,8 @@ if __name__ == "__main__":
 
     conf = {'bootstrap.servers': 'localhost:19092, localhost:29092, localhost:39092'}
     myc = Procedure('foo', 'bar', uppercase, conf)
-    myc.run()
+    # myc.run()
 
-    # p = multiprocessing.Process(target=myc.run)
-    # p.start()
-    # p.join()
+    p = multiprocessing.Process(target=myc.run)
+    p.start()
+    p.join()

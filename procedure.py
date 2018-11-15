@@ -34,17 +34,27 @@ class Procedure:
             def commit_cb(err, ps):
                 print('on_commit: err %s, partitions %s' % (err, ps))
 
-            conf = {'bootstrap.servers': 'localhost:9092',
-                    'group.id': 'proc_default',
-                    'session.timeout.ms': 6000,
-                    'enable.auto.commit': False,
-                    'enable.auto.offset.store': True,
-                    'default.topic.config': {'auto.offset.reset': 'smallest'},
-                    'on_commit': lambda err, ps: commit_cb(err, ps),
-                    'stats_cb': stats_cb,
-                    'statistics.interval.ms': 100000
-                    }
+＃＃＃＃＃＃＃＃＃＃＃＃＃＃＃＃
+                
+conf = {'bootstrap.servers': 'localhost:9092',
+        'group.id': 'proc_default',
+        'enable.auto.commit': False,
+        'enable.auto.offset.store': True,
+        }
 
+# init consumer...
+while True:
+    msg = c.poll(timeout=1.0)
+
+    # handle msg here...
+
+    c.commit(message=msg, asynchronous=False)
+    print('Commit done: position:', c.position(c.assignment()), 'commit:', c.committed(c.assignment()))
+
+    
+＃＃＃＃＃＃＃＃＃＃＃＃＃＃＃
+        
+            
             if self._kafka_conf:
                 conf.update(self._kafka_conf)
 
@@ -105,7 +115,6 @@ class Procedure:
                 raise Exception('produce timeout')
 
 
-        ###################################################
 
         c = self.consumer
 
